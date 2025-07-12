@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  superset-redis:
+    image: redis:7-alpine
+    container_name: ranker_superset_redis
+    restart: unless-stopped
+    volumes:
+      - superset_redis_data:/data
+
+  superset-db:
+    image: postgres:14-alpine
+    container_name: ranker_superset_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset_password
+    volumes:
+      - superset_db_data:/var/lib/postgresql/data
+
+  superset:
+    image: apache/superset:3.0.0
+    container_name: ranker_superset
+    restart: unless-stopped
+    depends_on:
+      - superset-db
+      - superset-redis
+      - postgres  # Our main database
+    environment:
+      # Database configuration
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+      SQLALCHEMY_DATABASE_URI: postgresql://superset:superset_password@superset-db:5432/superset
+
+      # Redis configuration
+      REDIS_URL: redis://superset-redis:6379/0
+
+      # Security
+      SUPERSET_SECRET_KEY: "your-superset-secret-key-change-in-production"
+
+      # Flask configuration
+      FLASK_ENV: development
+      SUPERSET_ENV: development
+
+      # Default admin user
+      SUPERSET_ADMIN_USERNAME: admin
+      SUPERSET_ADMIN_PASSWORD: admin
+      SUPERSET_ADMIN_EMAIL: admin@superset.local
+      SUPERSET_ADMIN_FIRSTNAME: Admin
+      SUPERSET_ADMIN_LASTNAME: User
+    volumes:
+      - ./superset_config:/app/superset_config
+      - superset_home:/app/superset_home
+    ports:
+      - "8088:8088"
+    command: >
+      sh -c "
+        superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.local --password admin &&
+        superset db upgrade &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger
+      "
+
+  superset-worker:
+    image: apache/superset:3.0.0
+    container_name: ranker_superset_worker
+    restart: unless-stopped
+    depends_on:
+      - superset
+      - superset-redis
+    environment:
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+      REDIS_URL: redis://superset-redis:6379/0
+      SUPERSET_SECRET_KEY: "your-superset-secret-key-change-in-production"
+    volumes:
+      - ./superset_config:/app/superset_config
+      - superset_home:/app/superset_home
+    command: celery --app=superset.tasks.celery_app:app worker --loglevel=INFO
+
+  superset-beat:
+    image: apache/superset:3.0.0
+    container_name: ranker_superset_beat
+    restart: unless-stopped
+    depends_on:
+      - superset
+      - superset-redis
+    environment:
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+      REDIS_URL: redis://superset-redis:6379/0
+      SUPERSET_SECRET_KEY: "your-superset-secret-key-change-in-production"
+    volumes:
+      - ./superset_config:/app/superset_config
+      - superset_home:/app/superset_home
+    command: celery --app=superset.tasks.celery_app:app beat --loglevel=INFO
+
+volumes:
+  superset_redis_data:
+  superset_db_data:
+  superset_home:
+
+networks:
+  default:
+    external:
+      name: ranker_default
