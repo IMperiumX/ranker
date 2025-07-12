@@ -1,0 +1,7 @@
+# PostgreSQL
+# ------------------------------------------------------------------------------
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=ranker
+POSTGRES_USER=yTOQwkQjXBaLImqgjOfWtHwFVlBUfYjy
+POSTGRES_PASSWORD=fLwturDxrGv6Nin9L7vveIDFmeLmvwXkxae5C9u4g0D1Vn2mYURVbX1KGALHdmb2
